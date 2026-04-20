@@ -53,6 +53,8 @@ export {
   isMiniPayBrowser,
   supportsFeeCurrency,
   getMiniPayDeepLink,
+  getMiniPayUserAgent,
+  openInMiniPay,
   isOnCeloMainnet,
 } from "./minipay";
 

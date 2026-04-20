@@ -39,3 +39,23 @@ export function getMiniPayDeepLink(dappUrl: string): string {
 export function isOnCeloMainnet(chainId: number): boolean {
   return chainId === 42220;
 }
+
+/**
+ * Attempt to extract the MiniPay version string from the user agent.
+ * Returns null if not in MiniPay or version not detectable.
+ */
+export function getMiniPayUserAgent(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (!ua.toLowerCase().includes("minipay")) return null;
+  return ua;
+}
+
+/**
+ * Open a dApp URL inside MiniPay using its deeplink scheme.
+ * Should be called in response to a user gesture.
+ */
+export function openInMiniPay(dappUrl: string): void {
+  if (typeof window === "undefined") return;
+  window.location.href = getMiniPayDeepLink(dappUrl);
+}
