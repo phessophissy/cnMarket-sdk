@@ -228,8 +228,9 @@ export class CeloNFTClient {
   /**
    * Mint an NFT using a browser wallet (MetaMask, MiniPay, etc.)
    * Only works in browser environments with window.ethereum.
+   * Returns a MintResult with the tx hash and rarity.
    */
-  async mintNFT(rarity: Rarity): Promise<Hash> {
+  async mintNFT(rarity: Rarity): Promise<{ hash: Hash; rarity: Rarity }> {
     if (typeof window === "undefined") {
       throw new Error("mintNFT requires a browser environment with window.ethereum");
     }
@@ -244,7 +245,7 @@ export class CeloNFTClient {
     const [account] = await walletClient.getAddresses();
     const price = MINT_PRICES[rarity];
 
-    return walletClient.writeContract({
+    const hash = await walletClient.writeContract({
       address: this.config.nftAddress,
       abi: nftAbi,
       functionName: "mint",
@@ -253,6 +254,7 @@ export class CeloNFTClient {
       account,
       chain: celoViemChain,
     });
+    return { hash, rarity };
   }
 
   /**
