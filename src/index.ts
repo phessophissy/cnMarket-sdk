@@ -62,6 +62,7 @@ export {
   usePolling,
   useClipboard,
   useNFTSupply,
+  useActiveListings,
   truncateAddress,
   formatCELO,
   formatListingPrice,

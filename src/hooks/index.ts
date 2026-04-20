@@ -134,3 +134,44 @@ export function useNFTSupply(
 
   return { totalSupply, isLoading, error, refresh: fetch };
 }
+
+export interface ActiveListingsState {
+  listings: Array<{ tokenId: bigint; seller: string; price: bigint }>;
+  isLoading: boolean;
+  error: Error | null;
+  refresh: () => void;
+}
+
+/**
+ * Hook to fetch and poll active marketplace listings.
+ *
+ * @example
+ * ```tsx
+ * const { listings } = useActiveListings(client);
+ * ```
+ */
+export function useActiveListings(
+  client: { getAllActiveListings: () => Promise<Array<{ tokenId: bigint; seller: string; price: bigint }>> } | null,
+  intervalMs = 20_000
+): ActiveListingsState {
+  const [listings, setListings] = useState<Array<{ tokenId: bigint; seller: string; price: bigint }>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetch = useCallback(async () => {
+    if (!client) return;
+    try {
+      const data = await client.getAllActiveListings();
+      setListings(data);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [client]);
+
+  usePolling(fetch, intervalMs, !!client);
+
+  return { listings, isLoading, error, refresh: fetch };
+}
