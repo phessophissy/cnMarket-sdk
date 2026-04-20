@@ -65,6 +65,8 @@ export function useClipboard(timeout = 2000) {
  */
 export function truncateAddress(address: string, chars = 4): string {
   if (!address) return "";
+  const minLength = chars * 2 + 3; // prefix (2) + chars + "..." + chars
+  if (address.length <= minLength) return address;
   return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
 }
 
