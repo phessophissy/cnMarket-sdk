@@ -311,6 +311,36 @@ var RARITY_LABELS = {
   [1 /* Rare */]: "Rare",
   [2 /* Legendary */]: "Legendary"
 };
+var RARITY_COLORS = {
+  [0 /* Common */]: {
+    bg: "bg-gray-500",
+    text: "text-gray-100",
+    border: "border-gray-500",
+    gradient: "from-slate-400 to-gray-600"
+  },
+  [1 /* Rare */]: {
+    bg: "bg-blue-500",
+    text: "text-blue-100",
+    border: "border-blue-500",
+    gradient: "from-blue-400 to-purple-600"
+  },
+  [2 /* Legendary */]: {
+    bg: "bg-yellow-500",
+    text: "text-yellow-100",
+    border: "border-yellow-500",
+    gradient: "from-yellow-400 to-orange-600"
+  }
+};
+function isValidAddress(address) {
+  return /^0x[0-9a-fA-F]{40}$/.test(address);
+}
+function parseRarity(raw) {
+  const n = Number(raw);
+  if (n === 0 /* Common */) return 0 /* Common */;
+  if (n === 1 /* Rare */) return 1 /* Rare */;
+  if (n === 2 /* Legendary */) return 2 /* Legendary */;
+  throw new RangeError(`Unknown rarity value: ${n}`);
+}
 
 // src/chains/index.ts
 var celoMainnet = {
@@ -328,10 +358,64 @@ var celoAlfajores = {
   nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
   testnet: true
 };
-var SUPPORTED_CHAINS = [celoMainnet, celoAlfajores];
+var celoBaklava = {
+  id: 62320,
+  name: "Celo Baklava Testnet",
+  rpcUrl: "https://baklava-forno.celo-testnet.org",
+  explorerUrl: "https://baklava-blockscout.celo-testnet.org",
+  nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
+  testnet: true
+};
+var SUPPORTED_CHAINS = [celoMainnet, celoAlfajores, celoBaklava];
 function getChainById(chainId) {
   return SUPPORTED_CHAINS.find((c) => c.id === chainId);
 }
+function getExplorerUrl(address, chainId = 42220) {
+  const chain = getChainById(chainId) ?? celoMainnet;
+  return `${chain.explorerUrl}/address/${address}`;
+}
+function getExplorerTxUrl(txHash, chainId = 42220) {
+  const chain = getChainById(chainId) ?? celoMainnet;
+  return `${chain.explorerUrl}/tx/${txHash}`;
+}
+
+// src/errors/index.ts
+var CnMarketError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "CnMarketError";
+  }
+};
+var NoProviderError = class extends CnMarketError {
+  constructor() {
+    super(
+      "No Ethereum provider found. Please use a Web3 wallet (e.g. MiniPay, MetaMask)."
+    );
+    this.name = "NoProviderError";
+  }
+};
+var TokenNotFoundError = class extends CnMarketError {
+  constructor(tokenId) {
+    super(`NFT token #${tokenId} does not exist.`);
+    this.name = "TokenNotFoundError";
+    this.tokenId = tokenId;
+  }
+};
+var ListingNotActiveError = class extends CnMarketError {
+  constructor(tokenId) {
+    super(`Token #${tokenId} is not listed for sale.`);
+    this.name = "ListingNotActiveError";
+    this.tokenId = tokenId;
+  }
+};
+var WrongChainError = class extends CnMarketError {
+  constructor(expected, actual) {
+    super(`Wrong chain. Expected chainId ${expected}, got ${actual}.`);
+    this.name = "WrongChainError";
+    this.expected = expected;
+    this.actual = actual;
+  }
+};
 
 // src/client/CeloNFTClient.ts
 var celoViemChain = {
@@ -360,6 +444,15 @@ var CeloNFTClient = class {
       chain,
       transport: viem.http(rpcUrl)
     });
+  }
+  /** Returns the current SDK config (addresses, rpcUrl) */
+  getConfig() {
+    return Object.freeze({ ...this.config });
+  }
+  /** Returns true if the configured RPC URL points to a testnet */
+  isTestnet() {
+    const rpcUrl = this.config.rpcUrl ?? celoMainnet.rpcUrl;
+    return rpcUrl.includes("alfajores") || rpcUrl.includes("baklava");
   }
   // ─── NFT Read Methods ────────────────────────────────────────────────────
   async getTotalSupply() {
@@ -473,24 +566,37 @@ var CeloNFTClient = class {
     }
     return listings;
   }
+  /**
+   * Returns the lowest listed price among all active listings.
+   * Returns null if no listings are active.
+   */
+  async getFloorPrice() {
+    const listings = await this.getAllActiveListings();
+    if (listings.length === 0) return null;
+    return listings.reduce(
+      (min, l) => l.price < min ? l.price : min,
+      listings[0].price
+    );
+  }
   // ─── Write Methods (requires wallet) ────────────────────────────────────
   /**
    * Mint an NFT using a browser wallet (MetaMask, MiniPay, etc.)
    * Only works in browser environments with window.ethereum.
+   * Returns a MintResult with the tx hash and rarity.
    */
   async mintNFT(rarity) {
     if (typeof window === "undefined") {
       throw new Error("mintNFT requires a browser environment with window.ethereum");
     }
     const eth = window.ethereum;
-    if (!eth) throw new Error("No Ethereum provider found");
+    if (!eth) throw new NoProviderError();
     const walletClient = viem.createWalletClient({
       chain: celoViemChain,
       transport: viem.custom(eth)
     });
     const [account] = await walletClient.getAddresses();
     const price = MINT_PRICES[rarity];
-    return walletClient.writeContract({
+    const hash = await walletClient.writeContract({
       address: this.config.nftAddress,
       abi: nftAbi,
       functionName: "mint",
@@ -499,6 +605,7 @@ var CeloNFTClient = class {
       account,
       chain: celoViemChain
     });
+    return { hash, rarity };
   }
   /**
    * List an NFT for sale. Make sure to approve the marketplace first.
@@ -506,7 +613,7 @@ var CeloNFTClient = class {
   async listNFT(tokenId, price) {
     if (typeof window === "undefined") throw new Error("Browser environment required");
     const eth = window.ethereum;
-    if (!eth) throw new Error("No Ethereum provider found");
+    if (!eth) throw new NoProviderError();
     const walletClient = viem.createWalletClient({
       chain: celoViemChain,
       transport: viem.custom(eth)
@@ -527,7 +634,7 @@ var CeloNFTClient = class {
   async buyNFT(tokenId, price) {
     if (typeof window === "undefined") throw new Error("Browser environment required");
     const eth = window.ethereum;
-    if (!eth) throw new Error("No Ethereum provider found");
+    if (!eth) throw new NoProviderError();
     const walletClient = viem.createWalletClient({
       chain: celoViemChain,
       transport: viem.custom(eth)
@@ -549,7 +656,7 @@ var CeloNFTClient = class {
   async cancelListing(tokenId) {
     if (typeof window === "undefined") throw new Error("Browser environment required");
     const eth = window.ethereum;
-    if (!eth) throw new Error("No Ethereum provider found");
+    if (!eth) throw new NoProviderError();
     const walletClient = viem.createWalletClient({
       chain: celoViemChain,
       transport: viem.custom(eth)
@@ -590,8 +697,25 @@ function supportsFeeCurrency() {
 function getMiniPayDeepLink(dappUrl) {
   return `celo://minipay/dapp?url=${encodeURIComponent(dappUrl)}`;
 }
+var CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+var CUSD_ALFAJORES_ADDRESS = "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1";
+function getFeeCurrencyAddress(chainId) {
+  if (chainId === 42220) return CUSD_ADDRESS;
+  if (chainId === 44787) return CUSD_ALFAJORES_ADDRESS;
+  return void 0;
+}
 function isOnCeloMainnet(chainId) {
   return chainId === 42220;
+}
+function getMiniPayUserAgent() {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (!ua.toLowerCase().includes("minipay")) return null;
+  return ua;
+}
+function openInMiniPay(dappUrl) {
+  if (typeof window === "undefined") return;
+  window.location.href = getMiniPayDeepLink(dappUrl);
 }
 function useMiniPayDetect() {
   const [isMiniPay, setIsMiniPay] = react.useState(false);
@@ -625,32 +749,157 @@ function useClipboard(timeout = 2e3) {
 }
 function truncateAddress(address, chars = 4) {
   if (!address) return "";
+  const minLength = chars * 2 + 3;
+  if (address.length <= minLength) return address;
   return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
 }
 function formatCELO(wei, decimals = 4) {
   const eth = Number(wei) / 1e18;
   return `${eth.toFixed(decimals)} CELO`;
 }
+function formatListingPrice(priceWei) {
+  return formatCELO(priceWei, 4);
+}
+function formatMintPrice(priceWei, rarityLabel) {
+  return `${rarityLabel} \u2014 ${formatCELO(priceWei, 4)}`;
+}
+function useNFTSupply(client, intervalMs = 15e3) {
+  const [totalSupply, setTotalSupply] = react.useState(void 0);
+  const [isLoading, setIsLoading] = react.useState(true);
+  const [error, setError] = react.useState(null);
+  const fetch = react.useCallback(async () => {
+    if (!client) return;
+    try {
+      const supply = await client.getTotalSupply();
+      setTotalSupply(supply);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [client]);
+  usePolling(fetch, intervalMs, !!client);
+  return { totalSupply, isLoading, error, refresh: fetch };
+}
+function useActiveListings(client, intervalMs = 2e4) {
+  const [listings, setListings] = react.useState([]);
+  const [isLoading, setIsLoading] = react.useState(true);
+  const [error, setError] = react.useState(null);
+  const fetch = react.useCallback(async () => {
+    if (!client) return;
+    try {
+      const data = await client.getAllActiveListings();
+      setListings(data);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [client]);
+  usePolling(fetch, intervalMs, !!client);
+  return { listings, isLoading, error, refresh: fetch };
+}
+function useWalletConnection() {
+  const [address, setAddress] = react.useState(null);
+  const eth = typeof window !== "undefined" ? window.ethereum : void 0;
+  const isMiniPay = Boolean(eth?.isMiniPay);
+  const isConnected = !!address;
+  react.useEffect(() => {
+    if (!eth) return;
+    eth.request({ method: "eth_accounts" }).then((accounts) => {
+      const list = accounts;
+      if (list.length > 0) setAddress(list[0]);
+    }).catch(() => {
+    });
+  }, [eth]);
+  const connect = react.useCallback(async () => {
+    if (!eth) return;
+    const accounts = await eth.request({ method: "eth_requestAccounts" });
+    if (accounts.length > 0) setAddress(accounts[0]);
+  }, [eth]);
+  const disconnect = react.useCallback(() => setAddress(null), []);
+  return { address, isConnected, isMiniPay, connect, disconnect };
+}
+function useTransactionStatus(pollFn, intervalMs = 3e3) {
+  const [status, setStatus] = react.useState("idle");
+  const [hash, setHashState] = react.useState(null);
+  const [error, setError] = react.useState(null);
+  const setHash = react.useCallback((h) => {
+    setHashState(h);
+    setStatus("pending");
+  }, []);
+  const reset = react.useCallback(() => {
+    setHashState(null);
+    setStatus("idle");
+    setError(null);
+  }, []);
+  react.useEffect(() => {
+    if (!hash || status !== "pending" || !pollFn) return;
+    const id = setInterval(async () => {
+      try {
+        const confirmed = await pollFn(hash);
+        if (confirmed) {
+          setStatus("success");
+          clearInterval(id);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e : new Error(String(e)));
+        setStatus("error");
+        clearInterval(id);
+      }
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [hash, status, pollFn, intervalMs]);
+  return { status, hash, error, reset, setHash };
+}
 
+// src/index.ts
+var SDK_VERSION = "1.1.0";
+
+exports.CUSD_ADDRESS = CUSD_ADDRESS;
+exports.CUSD_ALFAJORES_ADDRESS = CUSD_ALFAJORES_ADDRESS;
 exports.CeloNFTClient = CeloNFTClient;
+exports.CnMarketError = CnMarketError;
+exports.ListingNotActiveError = ListingNotActiveError;
 exports.MINT_PRICES = MINT_PRICES;
+exports.NoProviderError = NoProviderError;
+exports.RARITY_COLORS = RARITY_COLORS;
 exports.RARITY_LABELS = RARITY_LABELS;
 exports.Rarity = Rarity;
+exports.SDK_VERSION = SDK_VERSION;
 exports.SUPPORTED_CHAINS = SUPPORTED_CHAINS;
+exports.TokenNotFoundError = TokenNotFoundError;
+exports.WrongChainError = WrongChainError;
 exports.celoAlfajores = celoAlfajores;
+exports.celoBaklava = celoBaklava;
 exports.celoMainnet = celoMainnet;
 exports.detectMiniPay = detectMiniPay;
 exports.formatCELO = formatCELO;
+exports.formatListingPrice = formatListingPrice;
+exports.formatMintPrice = formatMintPrice;
 exports.getChainById = getChainById;
+exports.getExplorerTxUrl = getExplorerTxUrl;
+exports.getExplorerUrl = getExplorerUrl;
+exports.getFeeCurrencyAddress = getFeeCurrencyAddress;
 exports.getMiniPayDeepLink = getMiniPayDeepLink;
+exports.getMiniPayUserAgent = getMiniPayUserAgent;
 exports.isMiniPayBrowser = isMiniPayBrowser;
 exports.isOnCeloMainnet = isOnCeloMainnet;
+exports.isValidAddress = isValidAddress;
 exports.marketplaceAbi = marketplaceAbi;
 exports.nftAbi = nftAbi;
+exports.openInMiniPay = openInMiniPay;
+exports.parseRarity = parseRarity;
 exports.supportsFeeCurrency = supportsFeeCurrency;
 exports.truncateAddress = truncateAddress;
+exports.useActiveListings = useActiveListings;
 exports.useClipboard = useClipboard;
 exports.useMiniPayDetect = useMiniPayDetect;
+exports.useNFTSupply = useNFTSupply;
 exports.usePolling = usePolling;
+exports.useTransactionStatus = useTransactionStatus;
+exports.useWalletConnection = useWalletConnection;
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

@@ -10,6 +10,14 @@ declare enum Rarity {
 /** Mint prices in wei (CELO) */
 declare const MINT_PRICES: Record<Rarity, bigint>;
 declare const RARITY_LABELS: Record<Rarity, string>;
+interface RarityColorSet {
+    bg: string;
+    text: string;
+    border: string;
+    gradient: string;
+}
+/** Tailwind CSS classes for each rarity tier */
+declare const RARITY_COLORS: Record<Rarity, RarityColorSet>;
 type Address = `0x${string}`;
 interface CeloNFTSDKConfig {
     /** Deployed CeloNFT contract address */
@@ -35,6 +43,13 @@ interface NFTToken {
     rarity: Rarity;
     tokenURI: string;
 }
+/** Returns true if the string is a valid checksummed or lowercase Ethereum address */
+declare function isValidAddress(address: string): address is Address;
+/**
+ * Parse a raw uint8 rarity value from the contract into the Rarity enum.
+ * Throws if the value is out of range.
+ */
+declare function parseRarity(raw: number | bigint): Rarity;
 
 /**
  * CeloNFT SDK Client — works in any JS/TS environment (Node.js, browser, React, Vue…)
@@ -55,6 +70,10 @@ declare class CeloNFTClient {
     private publicClient;
     private config;
     constructor(config: CeloNFTSDKConfig);
+    /** Returns the current SDK config (addresses, rpcUrl) */
+    getConfig(): Readonly<CeloNFTSDKConfig>;
+    /** Returns true if the configured RPC URL points to a testnet */
+    isTestnet(): boolean;
     getTotalSupply(): Promise<bigint>;
     getOwnerOf(tokenId: bigint): Promise<Address>;
     getTokenRarity(tokenId: bigint): Promise<Rarity>;
@@ -69,10 +88,19 @@ declare class CeloNFTClient {
     getActiveListingAt(index: bigint): Promise<NFTListing>;
     getAllActiveListings(): Promise<NFTListing[]>;
     /**
+     * Returns the lowest listed price among all active listings.
+     * Returns null if no listings are active.
+     */
+    getFloorPrice(): Promise<bigint | null>;
+    /**
      * Mint an NFT using a browser wallet (MetaMask, MiniPay, etc.)
      * Only works in browser environments with window.ethereum.
+     * Returns a MintResult with the tx hash and rarity.
      */
-    mintNFT(rarity: Rarity): Promise<Hash>;
+    mintNFT(rarity: Rarity): Promise<{
+        hash: Hash;
+        rarity: Rarity;
+    }>;
     /**
      * List an NFT for sale. Make sure to approve the marketplace first.
      */
@@ -522,8 +550,19 @@ interface ChainConfig {
 }
 declare const celoMainnet: ChainConfig;
 declare const celoAlfajores: ChainConfig;
-declare const SUPPORTED_CHAINS: readonly [ChainConfig, ChainConfig];
+declare const celoBaklava: ChainConfig;
+declare const SUPPORTED_CHAINS: readonly [ChainConfig, ChainConfig, ChainConfig];
 declare function getChainById(chainId: number): ChainConfig | undefined;
+/**
+ * Build a block explorer URL for a given address.
+ * @example getExplorerUrl("0xabc...", 42220) // → "https://celoscan.io/address/0xabc..."
+ */
+declare function getExplorerUrl(address: string, chainId?: number): string;
+/**
+ * Build a block explorer URL for a given transaction hash.
+ * @example getExplorerTxUrl("0xtxhash...", 42220) // → "https://celoscan.io/tx/0xtxhash..."
+ */
+declare function getExplorerTxUrl(txHash: string, chainId?: number): string;
 
 /**
  * MiniPay detection and utilities.
@@ -541,8 +580,32 @@ declare function isMiniPayBrowser(): boolean;
 declare function supportsFeeCurrency(): boolean;
 /** MiniPay deep link to open a dApp URL */
 declare function getMiniPayDeepLink(dappUrl: string): string;
+/**
+ * cUSD contract address on Celo mainnet — used as fee currency in MiniPay.
+ * Pass this as `feeCurrency` in Celo transactions to pay gas with cUSD.
+ */
+declare const CUSD_ADDRESS: "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+/**
+ * cUSD contract address on Alfajores testnet.
+ */
+declare const CUSD_ALFAJORES_ADDRESS: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1";
+/**
+ * Returns the cUSD fee currency address for a given chainId.
+ * Returns undefined for unsupported chains.
+ */
+declare function getFeeCurrencyAddress(chainId: number): string | undefined;
 /** Check if current chain is Celo mainnet (required for MiniPay production) */
 declare function isOnCeloMainnet(chainId: number): boolean;
+/**
+ * Attempt to extract the MiniPay version string from the user agent.
+ * Returns null if not in MiniPay or version not detectable.
+ */
+declare function getMiniPayUserAgent(): string | null;
+/**
+ * Open a dApp URL inside MiniPay using its deeplink scheme.
+ * Should be called in response to a user gesture.
+ */
+declare function openInMiniPay(dappUrl: string): void;
 
 interface MiniPayHookState {
     isMiniPay: boolean;
@@ -578,5 +641,121 @@ declare function truncateAddress(address: string, chars?: number): string;
  * Format CELO amount from wei bigint to human-readable string.
  */
 declare function formatCELO(wei: bigint, decimals?: number): string;
+/**
+ * Format a listing price for display.
+ * @example formatListingPrice(30000000000000000n) // → "0.0300 CELO"
+ */
+declare function formatListingPrice(priceWei: bigint): string;
+/**
+ * Format a mint price with rarity label.
+ * @example formatMintPrice(10000000000000000n, "Common") // → "Common — 0.0100 CELO"
+ */
+declare function formatMintPrice(priceWei: bigint, rarityLabel: string): string;
+interface NFTSupplyState {
+    totalSupply: bigint | undefined;
+    isLoading: boolean;
+    error: Error | null;
+    refresh: () => void;
+}
+/**
+ * Hook to poll the total NFT supply at a given interval.
+ *
+ * @example
+ * ```tsx
+ * const { totalSupply, isLoading } = useNFTSupply(client, 10_000);
+ * ```
+ */
+declare function useNFTSupply(client: {
+    getTotalSupply: () => Promise<bigint>;
+} | null, intervalMs?: number): NFTSupplyState;
+interface ActiveListingsState {
+    listings: Array<{
+        tokenId: bigint;
+        seller: string;
+        price: bigint;
+    }>;
+    isLoading: boolean;
+    error: Error | null;
+    refresh: () => void;
+}
+/**
+ * Hook to fetch and poll active marketplace listings.
+ *
+ * @example
+ * ```tsx
+ * const { listings } = useActiveListings(client);
+ * ```
+ */
+declare function useActiveListings(client: {
+    getAllActiveListings: () => Promise<Array<{
+        tokenId: bigint;
+        seller: string;
+        price: bigint;
+    }>>;
+} | null, intervalMs?: number): ActiveListingsState;
+interface WalletConnectionState {
+    address: string | null;
+    isConnected: boolean;
+    isMiniPay: boolean;
+    connect: () => Promise<void>;
+    disconnect: () => void;
+}
+/**
+ * Lightweight wallet connection hook that auto-connects in MiniPay.
+ * Wraps window.ethereum directly — no wagmi dependency required.
+ *
+ * @example
+ * ```tsx
+ * const { address, isMiniPay, connect } = useWalletConnection();
+ * ```
+ */
+declare function useWalletConnection(): WalletConnectionState;
+type TxStatus = "idle" | "pending" | "success" | "error";
+interface TransactionStatusState {
+    status: TxStatus;
+    hash: string | null;
+    error: Error | null;
+    reset: () => void;
+}
+/**
+ * Track the status of a submitted transaction.
+ *
+ * @example
+ * ```tsx
+ * const { status, hash, reset } = useTransactionStatus();
+ * // after submitting: setHash(txHash)
+ * ```
+ */
+declare function useTransactionStatus(pollFn?: (hash: string) => Promise<boolean>, intervalMs?: number): TransactionStatusState & {
+    setHash: (h: string) => void;
+};
 
-export { type Address, CeloNFTClient, type CeloNFTSDKConfig, type ChainConfig, MINT_PRICES, type MintResult, type NFTListing, type NFTToken, RARITY_LABELS, Rarity, SUPPORTED_CHAINS, celoAlfajores, celoMainnet, detectMiniPay, formatCELO, getChainById, getMiniPayDeepLink, isMiniPayBrowser, isOnCeloMainnet, marketplaceAbi, nftAbi, supportsFeeCurrency, truncateAddress, useClipboard, useMiniPayDetect, usePolling };
+/** Base error class for all cnMarket SDK errors */
+declare class CnMarketError extends Error {
+    constructor(message: string);
+}
+/** Thrown when no Ethereum provider is found in window.ethereum */
+declare class NoProviderError extends CnMarketError {
+    constructor();
+}
+/** Thrown when an NFT does not exist or has not been minted */
+declare class TokenNotFoundError extends CnMarketError {
+    readonly tokenId: bigint;
+    constructor(tokenId: bigint);
+}
+/** Thrown when a listing is not active */
+declare class ListingNotActiveError extends CnMarketError {
+    readonly tokenId: bigint;
+    constructor(tokenId: bigint);
+}
+/** Thrown when operating on the wrong chain */
+declare class WrongChainError extends CnMarketError {
+    readonly expected: number;
+    readonly actual: number;
+    constructor(expected: number, actual: number);
+}
+
+/** Current SDK version */
+declare const SDK_VERSION = "1.1.0";
+
+export { type Address, CUSD_ADDRESS, CUSD_ALFAJORES_ADDRESS, CeloNFTClient, type CeloNFTSDKConfig, type ChainConfig, CnMarketError, ListingNotActiveError, MINT_PRICES, type MintResult, type NFTListing, type NFTToken, NoProviderError, RARITY_COLORS, RARITY_LABELS, Rarity, type RarityColorSet, SDK_VERSION, SUPPORTED_CHAINS, TokenNotFoundError, WrongChainError, celoAlfajores, celoBaklava, celoMainnet, detectMiniPay, formatCELO, formatListingPrice, formatMintPrice, getChainById, getExplorerTxUrl, getExplorerUrl, getFeeCurrencyAddress, getMiniPayDeepLink, getMiniPayUserAgent, isMiniPayBrowser, isOnCeloMainnet, isValidAddress, marketplaceAbi, nftAbi, openInMiniPay, parseRarity, supportsFeeCurrency, truncateAddress, useActiveListings, useClipboard, useMiniPayDetect, useNFTSupply, usePolling, useTransactionStatus, useWalletConnection };
