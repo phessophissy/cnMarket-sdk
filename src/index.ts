@@ -64,3 +64,12 @@ export {
   truncateAddress,
   formatCELO,
 } from "./hooks";
+
+// Error classes
+export {
+  CnMarketError,
+  NoProviderError,
+  TokenNotFoundError,
+  ListingNotActiveError,
+  WrongChainError,
+} from "./errors";
