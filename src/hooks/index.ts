@@ -223,3 +223,61 @@ export function useWalletConnection(): WalletConnectionState {
 
   return { address, isConnected, isMiniPay, connect, disconnect };
 }
+
+export type TxStatus = "idle" | "pending" | "success" | "error";
+
+export interface TransactionStatusState {
+  status: TxStatus;
+  hash: string | null;
+  error: Error | null;
+  reset: () => void;
+}
+
+/**
+ * Track the status of a submitted transaction.
+ *
+ * @example
+ * ```tsx
+ * const { status, hash, reset } = useTransactionStatus();
+ * // after submitting: setHash(txHash)
+ * ```
+ */
+export function useTransactionStatus(
+  pollFn?: (hash: string) => Promise<boolean>,
+  intervalMs = 3000
+): TransactionStatusState & { setHash: (h: string) => void } {
+  const [status, setStatus] = useState<TxStatus>("idle");
+  const [hash, setHashState] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  const setHash = useCallback((h: string) => {
+    setHashState(h);
+    setStatus("pending");
+  }, []);
+
+  const reset = useCallback(() => {
+    setHashState(null);
+    setStatus("idle");
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    if (!hash || status !== "pending" || !pollFn) return;
+    const id = setInterval(async () => {
+      try {
+        const confirmed = await pollFn(hash);
+        if (confirmed) {
+          setStatus("success");
+          clearInterval(id);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e : new Error(String(e)));
+        setStatus("error");
+        clearInterval(id);
+      }
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [hash, status, pollFn, intervalMs]);
+
+  return { status, hash, error, reset, setHash };
+}

@@ -69,6 +69,7 @@ export {
   useNFTSupply,
   useActiveListings,
   useWalletConnection,
+  useTransactionStatus,
   truncateAddress,
   formatCELO,
   formatListingPrice,
