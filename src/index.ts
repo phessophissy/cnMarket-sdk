@@ -44,7 +44,7 @@ export type {
 } from "./types";
 
 // Chain configs
-export { celoMainnet, celoAlfajores, SUPPORTED_CHAINS, getChainById } from "./chains";
+export { celoMainnet, celoAlfajores, SUPPORTED_CHAINS, getChainById, getExplorerUrl, getExplorerTxUrl } from "./chains";
 export type { ChainConfig } from "./chains";
 
 // MiniPay utilities
