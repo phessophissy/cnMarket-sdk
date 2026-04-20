@@ -30,6 +30,7 @@ export {
   Rarity,
   MINT_PRICES,
   RARITY_LABELS,
+  RARITY_COLORS,
 } from "./types";
 export type {
   Address,
@@ -37,6 +38,7 @@ export type {
   NFTListing,
   MintResult,
   NFTToken,
+  RarityColorSet,
 } from "./types";
 
 // Chain configs

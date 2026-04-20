@@ -18,6 +18,35 @@ export const RARITY_LABELS: Record<Rarity, string> = {
   [Rarity.Legendary]: "Legendary",
 };
 
+export interface RarityColorSet {
+  bg: string;
+  text: string;
+  border: string;
+  gradient: string;
+}
+
+/** Tailwind CSS classes for each rarity tier */
+export const RARITY_COLORS: Record<Rarity, RarityColorSet> = {
+  [Rarity.Common]: {
+    bg: "bg-gray-500",
+    text: "text-gray-100",
+    border: "border-gray-500",
+    gradient: "from-slate-400 to-gray-600",
+  },
+  [Rarity.Rare]: {
+    bg: "bg-blue-500",
+    text: "text-blue-100",
+    border: "border-blue-500",
+    gradient: "from-blue-400 to-purple-600",
+  },
+  [Rarity.Legendary]: {
+    bg: "bg-yellow-500",
+    text: "text-yellow-100",
+    border: "border-yellow-500",
+    gradient: "from-yellow-400 to-orange-600",
+  },
+};
+
 export type Address = `0x${string}`;
 
 export interface CeloNFTSDKConfig {
