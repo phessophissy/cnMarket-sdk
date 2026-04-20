@@ -1,3 +1,6 @@
+/** Current SDK version */
+export const SDK_VERSION = "1.0.0";
+
 /**
  * @cnmarket/sdk — Official SDK for the cnMarket NFT Marketplace on Celo
  *
