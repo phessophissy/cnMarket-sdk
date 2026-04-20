@@ -1,0 +1,76 @@
+{
+  "name": "@phessophissy/cnmarket-sdk",
+  "version": "1.0.0",
+  "description": "Official SDK for the cnMarket NFT Marketplace on Celo — with MiniPay support",
+  "keywords": [
+    "celo",
+    "nft",
+    "marketplace",
+    "minipay",
+    "web3",
+    "sdk",
+    "wagmi",
+    "viem",
+    "blockchain"
+  ],
+  "author": "phessophissy",
+  "license": "MIT",
+  "homepage": "https://github.com/phessophissy/cnMarket#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phessophissy/cnMarket.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/phessophissy/cnMarket/issues"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "wagmi": ">=2"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "wagmi": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "react": "^18.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "wagmi": "^2.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
