@@ -35,6 +35,27 @@ export function getMiniPayDeepLink(dappUrl: string): string {
   return `celo://minipay/dapp?url=${encodeURIComponent(dappUrl)}`;
 }
 
+/**
+ * cUSD contract address on Celo mainnet — used as fee currency in MiniPay.
+ * Pass this as `feeCurrency` in Celo transactions to pay gas with cUSD.
+ */
+export const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a" as const;
+
+/**
+ * cUSD contract address on Alfajores testnet.
+ */
+export const CUSD_ALFAJORES_ADDRESS = "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1" as const;
+
+/**
+ * Returns the cUSD fee currency address for a given chainId.
+ * Returns undefined for unsupported chains.
+ */
+export function getFeeCurrencyAddress(chainId: number): string | undefined {
+  if (chainId === 42220) return CUSD_ADDRESS;
+  if (chainId === 44787) return CUSD_ALFAJORES_ADDRESS;
+  return undefined;
+}
+
 /** Check if current chain is Celo mainnet (required for MiniPay production) */
 export function isOnCeloMainnet(chainId: number): boolean {
   return chainId === 42220;

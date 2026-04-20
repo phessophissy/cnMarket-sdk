@@ -56,6 +56,9 @@ export {
   getMiniPayUserAgent,
   openInMiniPay,
   isOnCeloMainnet,
+  getFeeCurrencyAddress,
+  CUSD_ADDRESS,
+  CUSD_ALFAJORES_ADDRESS,
 } from "./minipay";
 
 // React hooks & utilities (framework-agnostic utils exported from hooks/)
