@@ -199,6 +199,19 @@ export class CeloNFTClient {
     return listings;
   }
 
+  /**
+   * Returns the lowest listed price among all active listings.
+   * Returns null if no listings are active.
+   */
+  async getFloorPrice(): Promise<bigint | null> {
+    const listings = await this.getAllActiveListings();
+    if (listings.length === 0) return null;
+    return listings.reduce(
+      (min, l) => (l.price < min ? l.price : min),
+      listings[0].price
+    );
+  }
+
   // ─── Write Methods (requires wallet) ────────────────────────────────────
 
   /**
