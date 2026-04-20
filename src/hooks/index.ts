@@ -75,3 +75,19 @@ export function formatCELO(wei: bigint, decimals = 4): string {
   const eth = Number(wei) / 1e18;
   return `${eth.toFixed(decimals)} CELO`;
 }
+
+/**
+ * Format a listing price for display.
+ * @example formatListingPrice(30000000000000000n) // → "0.0300 CELO"
+ */
+export function formatListingPrice(priceWei: bigint): string {
+  return formatCELO(priceWei, 4);
+}
+
+/**
+ * Format a mint price with rarity label.
+ * @example formatMintPrice(10000000000000000n, "Common") // → "Common — 0.0100 CELO"
+ */
+export function formatMintPrice(priceWei: bigint, rarityLabel: string): string {
+  return `${rarityLabel} — ${formatCELO(priceWei, 4)}`;
+}
